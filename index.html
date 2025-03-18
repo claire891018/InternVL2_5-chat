@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InternVL2.5 聊天介面</title>
+    <style>
+        body {
+            font-family: Verdana, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 1200px;
+            height: 100vh;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        header {
+            text-align: center;
+            padding: 15px;
+            background-color: #f1f1f1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        header h1 {
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        header h3 {
+            color: #505d6b;
+            margin: 10px 0 0 0;
+            font-weight: normal;
+        }
+
+        .chat-content {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        #chat-window {
+            flex: 1;
+            width: 100%;
+            border: 1px solid #ddd;
+            overflow-y: auto;
+            background: #f9f9f9;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        #chat-messages {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .chat-bubble {
+            max-width: 70%;
+            margin: 8px 8px;
+            padding: 1px 10px 1px 10px;
+            word-wrap: break-word;
+        }
+
+        .model-message {
+            background-color: #edecec;
+            align-self: flex-start;
+            border-radius: 12px 12px 12px 2px;
+        }
+
+        .human-message {
+            background-color: #c7e4ff;
+            color: #283643;
+            align-self: flex-end;
+            border-radius: 12px 12px 2px 12px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #5784ab;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-right: 8px;
+        }
+
+        button:hover {
+            background-color: #3e6d96;
+        }
+
+        .bottom-area {
+            margin-top: auto;
+        }
+
+        .image-preview {
+            margin-bottom: 15px;
+            display: none;
+            position: relative;
+            max-width: 250px;
+        }
+
+        .image-preview img {
+            max-width: 100%;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .remove-image {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: rgba(255, 255, 255, 0.7);
+            color: #333;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            text-align: center;
+            line-height: 24px;
+            cursor: pointer;
+        }
+
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            width: 100%;
+            padding: 15px 0;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-size: 16px;
+        }
+
+        #file-button {
+            background-color: #c87e8f;
+        }
+
+        #file-button:hover {
+            background-color: #9a6572;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                max-width: 100%;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>InternVL2.5 多模態聊天 🔆</h1>
+            <h3>您好！我是基於InternVL2.5的多模態助手。您可以發送文字或圖片與我交流。</h3>
+        </header>
+
+        <div class="chat-content">
+            <!-- 添加回缺少的聊天窗口和消息容器 -->
+            <div id="chat-window">
+                <div id="chat-messages">
+                    <!-- 初始消息將在用戶開始聊天時添加 -->
+                </div>
+            </div>
+
+            <div class="bottom-area">
+                <div class="image-preview" id="image-preview">
+                    <img id="preview-img" src="" alt="預覽圖片">
+                    <span class="remove-image" id="remove-image">×</span>
+                </div>
+
+                <div class="chat-input-area">
+                    <input type="text" id="user-input" placeholder="請輸入訊息...">
+                    <input type="file" id="file-input" class="file-input" accept="image/*">
+                    <button id="file-button">上傳圖片</button>
+                    <button id="send-button">發送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatMessages = document.getElementById('chat-messages');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+            const fileInput = document.getElementById('file-input');
+            const fileButton = document.getElementById('file-button');
+            const imagePreview = document.getElementById('image-preview');
+            const previewImg = document.getElementById('preview-img');
+            const removeImage = document.getElementById('remove-image');
+            const chatWindow = document.getElementById('chat-window');
+            
+            let currentImage = null;
+            let chatHistory = [];
+            
+            const API_URL = 'http://localhost:5000/chat';
+            
+            fileButton.addEventListener('click', function() {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        currentImage = e.target.result;
+                        previewImg.src = currentImage;
+                        imagePreview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            removeImage.addEventListener('click', function() {
+                currentImage = null;
+                previewImg.src = '';
+                imagePreview.style.display = 'none';
+                fileInput.value = '';
+            });
+            
+            sendButton.addEventListener('click', sendMessage);
+            
+            userInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            function sendMessage() {
+                const message = userInput.value.trim();
+                if (message === '' && !currentImage) return;
+                
+                addMessage(message, 'human');
+                
+                sendButton.disabled = true;
+                const originalText = sendButton.textContent;
+                sendButton.innerHTML = '處理中 <span class="loading"></span>';
+                
+                chatHistory.push({
+                    role: "user",
+                    content: message
+                });
+                
+                const data = {
+                    message: message,
+                    image: currentImage,
+                    history: chatHistory
+                };
+                
+                fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('網絡響應不正常');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const response = data.response;
+                    addMessage(response, 'model');
+                    
+                    chatHistory.push({
+                        role: "assistant",
+                        content: response
+                    });
+                    
+                    userInput.value = '';
+                    
+                    if (currentImage) {
+                        currentImage = null;
+                        previewImg.src = '';
+                        imagePreview.style.display = 'none';
+                        fileInput.value = '';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    addMessage('發生錯誤: ' + error.message, 'model');
+                    userInput.value = '';
+                })
+                .finally(() => {
+                    sendButton.disabled = false;
+                    sendButton.innerHTML = originalText;
+                });
+            }
+            
+            function addMessage(message, sender) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chat-bubble');
+                
+                if (sender === 'human') {
+                    messageDiv.classList.add('human-message');
+                } else {
+                    messageDiv.classList.add('model-message');
+                }
+                
+                if (typeof marked !== 'undefined') {
+                    messageDiv.innerHTML = marked.parse(message);
+                } else {
+                    const paragraph = document.createElement('p');
+                    paragraph.textContent = message;
+                    messageDiv.appendChild(paragraph);
+                }
+                
+                chatMessages.prepend(messageDiv);
+                
+                setTimeout(() => {
+                    chatWindow.scrollTop = chatWindow.scrollHeight;
+                }, 100);
+            }
+        });
+    </script>
+</body>
+</html>
